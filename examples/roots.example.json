@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "roots": {
+    "web-example": "fixtures/web",
+    "worker-example": "fixtures/worker"
+  }
+}

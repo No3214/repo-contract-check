@@ -1,0 +1,6 @@
+{
+  "name": "synthetic-web-example",
+  "private": true,
+  "engines": {"node": ">=22"},
+  "scripts": {"verify": "node --test"}
+}

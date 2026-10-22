@@ -1,0 +1,2 @@
+# Synthetic file-presence fixture, intentionally not an executable workflow.
+# A passing file_exists check does not validate CI behavior or test coverage.

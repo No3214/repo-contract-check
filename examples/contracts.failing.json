@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {"id": "missing-verification-entry", "repo": "web-example", "kind": "nonempty_string", "file": "package.json", "pointer": "/scripts/not-configured"}
+  ]
+}

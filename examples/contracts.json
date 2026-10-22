@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {"id": "web-verify", "repo": "web-example", "kind": "nonempty_string", "file": "package.json", "pointer": "/scripts/verify"},
+    {"id": "web-runtime", "repo": "web-example", "kind": "equals", "file": "package.json", "pointer": "/engines/node", "expected": ">=22"},
+    {"id": "web-ci", "repo": "web-example", "kind": "file_exists", "file": ".github/workflows/ci.yml"},
+    {"id": "worker-runtime", "repo": "worker-example", "kind": "equals", "file": "pyproject.toml", "pointer": "/project/requires-python", "expected": ">=3.11"},
+    {"id": "worker-tests", "repo": "worker-example", "kind": "value_exists", "file": "pyproject.toml", "pointer": "/tool/pytest/ini_options/testpaths"},
+    {"id": "worker-evidence-location", "repo": "worker-example", "kind": "file_exists", "file": "docs/checks.md"}
+  ]
+}
