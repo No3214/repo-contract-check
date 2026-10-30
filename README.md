@@ -36,9 +36,9 @@ python3 -m venv .venv
 ```
 
 On Windows PowerShell, clone and enter the same repository, then use
-`py -3 -m venv .venv` and `.\\.venv\\Scripts\\Activate.ps1` if your execution policy permits.
-Alternatively, call `.\\.venv\\Scripts\\python.exe -m pip` and
-`.\\.venv\\Scripts\\repo-contract-check.exe` directly instead of activation.
+`py -3 -m venv .venv` and `.\.venv\Scripts\Activate.ps1` if your execution policy permits.
+Alternatively, call `.\.venv\Scripts\python.exe -m pip` and
+`.\.venv\Scripts\repo-contract-check.exe` directly instead of activation.
 
 With the environment selected:
 
