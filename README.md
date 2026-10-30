@@ -1,13 +1,22 @@
 # repo-contract-check
 
-Check explicit expectations across local repositories without executing their
-code. Keep portable rules separate from private directory mappings; receive a
-deterministic JSON or Markdown report containing aliases, rule IDs, and outcomes.
+**Check the repository expectations you choose, without running project code.**
+
+One repository declares `scripts.verify`; another declares `scripts.test`.
+Check explicit JSON/TOML expectations across local repositories and get a
+deterministic JSON or Markdown report. Keep portable rules separate from
+private directory mappings.
 
 Python 3.11+ · Standard-library runtime · JSON and TOML · MIT
 
-Useful when one repository declares `scripts.verify`, another declares
-`scripts.test`, and a Python project uses its own `pyproject.toml` conventions.
+| If you need to… | This tool can… |
+| --- | --- |
+| Confirm a chosen script declaration exists | Check a nonempty string at a JSON pointer |
+| Check an explicit Python version declaration | Compare a TOML value literally |
+| Share check outcomes without local paths or manifest values | Produce alias-and-rule reports |
+
+[Try the included examples](#quickstart) · [Declare your own contracts](#declare-your-own-contracts) · [Compare alternatives](#existing-alternatives)
+
 Each repository gets the rules you choose. There is no inferred common runtime
 or readiness score.
 
@@ -16,7 +25,22 @@ tests ran, CI works, a runtime is compatible, or evidence is current.**
 
 ## Quickstart
 
-From this checkout, install into your chosen Python environment:
+Clone the repository, then install into your chosen Python 3.11+ environment.
+For macOS or Linux:
+
+```sh
+git clone https://github.com/No3214/repo-contract-check.git
+cd repo-contract-check
+python3 -m venv .venv
+. .venv/bin/activate
+```
+
+On Windows PowerShell, clone and enter the same repository, then use
+`py -3 -m venv .venv` and `.\.venv\Scripts\Activate.ps1` if your execution policy permits.
+Alternatively, call `.\.venv\Scripts\python.exe -m pip` and
+`.\.venv\Scripts\repo-contract-check.exe` directly instead of activation.
+
+With the environment selected:
 
 ```sh
 python -m pip install .
