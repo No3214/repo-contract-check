@@ -11,6 +11,7 @@ import re
 import stat
 import tomllib
 from dataclasses import dataclass
+from decimal import Decimal, DecimalException
 from typing import Any
 
 MAX_DOCUMENT_BYTES = 1_048_576
@@ -84,6 +85,8 @@ def json_value(value: Any, depth: int = 0) -> bool:
         return True
     if type(value) is float:
         return math.isfinite(value)
+    if type(value) is Decimal:
+        return value.is_finite()
     if type(value) is list:
         return all(json_value(item, depth + 1) for item in value)
     if type(value) is dict:
@@ -125,9 +128,24 @@ def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _finite_float(text: str) -> float:
-    value = float(text)
-    if not math.isfinite(value):
+def _exact_float(text: str) -> Decimal | float:
+    # Keep the existing overflow/nonfinite policy, but do not use rounded
+    # binary floats for equality. Decimal construction from text is exact and
+    # independent of the caller's arithmetic precision.
+    approximate = float(text)
+    if not math.isfinite(approximate):
+        return approximate
+    value = Decimal(text)
+    # Decimal can return NaN for an unrepresentable exponent when the caller
+    # disabled InvalidOperation traps. Report the same fixed error either way.
+    if not value.is_finite():
+        raise InputError("invalid_document")
+    return value
+
+
+def _finite_float(text: str) -> Decimal:
+    value = _exact_float(text)
+    if type(value) is float:
         raise InputError("nonfinite_number")
     return value
 
@@ -144,14 +162,14 @@ def parse_document(data: bytes, suffix: str) -> Any:
                                   parse_float=_finite_float,
                                   parse_constant=_reject_constant)
         elif suffix == ".toml":
-            document = tomllib.loads(text)
+            document = tomllib.loads(text, parse_float=_exact_float)
         else:
             raise InputError("unsupported_format")
         _nesting(document)
         return document
     except InputError:
         raise
-    except (ValueError, UnicodeError, RecursionError, OverflowError):
+    except (ValueError, UnicodeError, RecursionError, OverflowError, DecimalException):
         raise InputError("invalid_document") from None
 
 

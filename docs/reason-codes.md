@@ -20,6 +20,9 @@ extensions use `contracts_unsupported_format` or `roots_unsupported_format`.
 `unsupported_value` means an `equals` target includes a value outside finite JSON
 types, such as a native TOML date/time. A pointer that cannot traverse the selected
 document produces `value_missing`; malformed pointer syntax is `invalid_pointer`.
+Numeric literals outside Decimal's representation limits produce
+`invalid_document` (or its configuration-prefixed form), without including the
+token or parser exception in the report.
 
 Configuration errors appear in the top-level `errors` list and prevent source
 checks. Source errors attach to their individual rule and do not stop other rules.

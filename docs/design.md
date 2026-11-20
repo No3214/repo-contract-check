@@ -40,6 +40,15 @@ value differs from JSON null. TOML dates/times and non-finite floats cannot be
 used by `equals`; existence checks may locate them. Nonempty strings must contain
 a non-whitespace character. File presence establishes no claim about contents.
 
+Finite float literals are parsed from their original text into `Decimal` in
+both JSON and TOML. This prevents binary rounding or underflow from turning
+different declared values into equal values. Equivalent decimal spellings
+remain equal, and integers remain a separate type. The previous Python float
+overflow guard remains: JSON overflow is rejected and TOML overflow is an
+unsupported value for `equals`. Exponents outside Decimal's representation
+limits are sanitized input errors. Parsing and equality do not perform decimal
+arithmetic. Reports do not include numeric input values.
+
 Input files have a 1 MiB limit. Source reads share an 8 MiB budget. A contract has
 at most 256 checks. Nesting is limited to 64 levels. JSON duplicate keys and
 non-finite numbers are rejected. Input documents are read once per invocation.

@@ -158,10 +158,17 @@ are unsupported. The same syntax traverses parsed TOML mappings and arrays.
 
 Object key order does not matter; array order does. Booleans, integers, floats,
 and strings are distinct: `true`, `1`, `1.0`, and `"1"` do not compare equal.
+Finite floating-point literals retain their exact decimal values across JSON
+and TOML: `9007199254740993.0` does not equal `9007199254740992.0`, and a nonzero
+small exponent does not become zero through binary-float underflow. Equivalent
+decimal spellings such as `1.0`, `1.00`, and `1e0` do compare equal.
 Missing differs from null. `equals` compares declarations literally; it does not
 interpret semver ranges or validate installed runtimes. TOML dates/times and
 non-finite floats produce `unsupported_value` for `equals`; `value_exists` may
-locate them. JSON NaN, Infinity, and overflowing floats are rejected.
+locate them. The existing float-range guard is retained: JSON NaN, Infinity,
+and numbers overflowing Python's finite float range are rejected; TOML
+overflowing floats remain unsupported by `equals`. Numeric tokens outside
+Decimal's representation limits produce `invalid_document`.
 
 ## Reports and exit codes
 
