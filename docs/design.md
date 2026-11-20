@@ -40,6 +40,28 @@ value differs from JSON null. TOML dates/times and non-finite floats cannot be
 used by `equals`; existence checks may locate them. Nonempty strings must contain
 a non-whitespace character. File presence establishes no claim about contents.
 
+Finite float literals are parsed from their original text into `Decimal` in
+both JSON and TOML. This prevents binary rounding or underflow from turning
+different declared values into equal values. Equivalent decimal spellings
+remain equal, and integers remain a separate type. The previous Python float
+overflow guard remains: JSON overflow is rejected and TOML overflow is an
+unsupported value for `equals`. Parsing and equality do not perform decimal
+arithmetic. Reports do not include numeric input values.
+
+After that overflow guard, an explicit `e`/`E` exponent is limited to a magnitude
+of 425,000,000. This fixed application policy uses the smaller of the documented
+[32-bit and 64-bit C Decimal exponent bounds](https://docs.python.org/3/library/decimal.html#decimal.MAX_EMAX).
+Together with the 1 MiB document limit, it also keeps fractional-digit shifts
+inside the 32-bit C representation's minimum exponent. The pure-Python backend
+does not enforce those C limits itself, so relying on constructor exceptions
+would make accepted input depend on the backend. The guard strips the sign,
+leading zeros, and TOML separators, then compares digit lengths and text and
+passes the shortened exponent to Decimal. It does not construct an arbitrary-size
+integer exponent or expand powers of ten. Exceeding the bound is a sanitized
+`invalid_document` error; ambient precision and trap settings do not alter the
+policy. This standardizes exponent validation; backend parser limits on very
+long coefficients can still produce a sanitized `invalid_document` error.
+
 Input files have a 1 MiB limit. Source reads share an 8 MiB budget. A contract has
 at most 256 checks. Nesting is limited to 64 levels. JSON duplicate keys and
 non-finite numbers are rejected. Input documents are read once per invocation.

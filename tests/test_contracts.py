@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from decimal import FloatOperation, InvalidOperation, localcontext
 import hashlib
 import io
 import json
@@ -52,6 +53,24 @@ class ContractTests(unittest.TestCase):
         report, code = self.check(*rules)
         self.assertFalse(report["errors"], report)
         return report["results"][0], code
+
+    def literal_report(self, actual, expected, source_format, contract_format):
+        # Keep numeric tokens as source text: constructing Python floats here
+        # would round away the differences the regression needs to exercise.
+        filename = "numeric" + source_format
+        source = '{"value":' + actual + '}' if source_format == ".json" else "value = " + actual
+        (self.repo / filename).write_text(source, encoding="utf-8")
+        contract = self.base / ("numeric-contract" + contract_format)
+        if contract_format == ".json":
+            rule = self.rule(file=filename, expected="NUMERIC-LITERAL")
+            text = json.dumps({"schema_version": 1, "checks": [rule]})
+            text = text.replace('"NUMERIC-LITERAL"', expected)
+        else:
+            text = ('schema_version = 1\n[[checks]]\nid = "check"\nrepo = "demo"\n'
+                    'kind = "equals"\nfile = "' + filename + '"\npointer = "/value"\n'
+                    'expected = ' + expected + '\n')
+        contract.write_text(text, encoding="utf-8")
+        return core.run_checks(contract, self.roots)
 
     def test_all_predicates_and_mixed_repositories(self):
         other = self.base / "worker"
@@ -114,6 +133,127 @@ class ContractTests(unittest.TestCase):
                 result, code = self.result(self.rule(expected=expected))
                 self.assertEqual(0 if matches else 1, code)
                 self.assertEqual("value_matches" if matches else "value_mismatch", result["reason"])
+
+    def test_decimal_literals_remain_distinct_across_formats(self):
+        cases = [("9007199254740993.0", "9007199254740992.0"),
+                 ("0.10000000000000001", "0.1"), ("1e-9999", "0.0")]
+        for source_format in (".json", ".toml"):
+            for contract_format in (".json", ".toml"):
+                for actual, expected in cases:
+                    with self.subTest(source=source_format, contract=contract_format,
+                                      actual=actual, expected=expected):
+                        report, code = self.literal_report(actual, expected, source_format, contract_format)
+                        self.assertEqual(1, code)
+                        self.assertEqual("value_mismatch", report["results"][0]["reason"])
+
+    def test_decimal_spelling_and_scalar_types_across_formats(self):
+        cases = [("1.0", "1.00", True), ("1e0", "1.0", True),
+                 ("0.10", "1e-1", True), ("-0.0", "0.0", True),
+                 ("1", "1.0", False), ("true", "1.0", False), ('"1.0"', "1.0", False)]
+        for source_format in (".json", ".toml"):
+            for contract_format in (".json", ".toml"):
+                for actual, expected, matches in cases:
+                    with self.subTest(source=source_format, contract=contract_format,
+                                      actual=actual, expected=expected):
+                        report, code = self.literal_report(actual, expected, source_format, contract_format)
+                        self.assertEqual(0 if matches else 1, code)
+                        self.assertFalse(report["errors"])
+
+    def test_nested_decimal_literals_are_compared_exactly(self):
+        for source_format in (".json", ".toml"):
+            actual = ('{"numbers":[9007199254740993.0]}' if source_format == ".json"
+                      else "{numbers=[9007199254740993.0]}")
+            for contract_format in (".json", ".toml"):
+                expected = ('{"numbers":[9007199254740992.0]}' if contract_format == ".json"
+                            else "{numbers=[9007199254740992.0]}")
+                with self.subTest(source=source_format, contract=contract_format):
+                    report, code = self.literal_report(actual, expected, source_format, contract_format)
+                    self.assertEqual(1, code)
+                    self.assertEqual("value_mismatch", report["results"][0]["reason"])
+
+    def test_float_overflow_policy_is_preserved(self):
+        for source_format in (".json", ".toml"):
+            with self.subTest(source=source_format):
+                report, code = self.literal_report("1e999", "0.0", source_format, ".json")
+                self.assertEqual(2, code)
+                self.assertEqual("nonfinite_number" if source_format == ".json" else "unsupported_value",
+                                 report["results"][0]["reason"])
+                result, exists_code = self.result(self.rule("value_exists", file="numeric" + source_format))
+                self.assertEqual(2 if source_format == ".json" else 0, exists_code)
+        for contract_format in (".json", ".toml"):
+            with self.subTest(contract=contract_format):
+                report, code = self.literal_report("0.0", "1e999", ".json", contract_format)
+                self.assertEqual(2, code)
+                self.assertEqual("contracts_nonfinite_number" if contract_format == ".json"
+                                 else "invalid_expected_value", report["errors"][0]["reason"])
+
+    def test_extreme_negative_exponent_is_sanitized(self):
+        literal = "1e-" + "9" * 512
+        for trap in (True, False):
+            with localcontext() as context:
+                context.traps[InvalidOperation] = trap
+                for source_format in (".json", ".toml"):
+                    with self.subTest(trap=trap, source=source_format):
+                        report, code = self.literal_report(literal, "0.0", source_format, ".json")
+                        self.assertEqual(2, code)
+                        self.assertEqual("invalid_document", report["results"][0]["reason"])
+                        self.assertNotIn(literal, render_json(report))
+                        self.assertNotIn(str(self.repo), render_json(report))
+                for contract_format in (".json", ".toml"):
+                    with self.subTest(trap=trap, contract=contract_format):
+                        report, code = self.literal_report("0.0", literal, ".json", contract_format)
+                        self.assertEqual(2, code)
+                        self.assertEqual("contracts_invalid_document", report["errors"][0]["reason"])
+
+    def test_decimal_exponent_boundary_and_equivalent_spellings(self):
+        cases = [("1e-425000000", "1.0e-425000000"),
+                 ("1E-000425000000", "1e-425000000"),
+                 ("0E+425000000", "0.0"),
+                 ("1e-" + "0" * 5000 + "9999", "1e-9999")]
+        for source_format in (".json", ".toml"):
+            for contract_format in (".json", ".toml"):
+                for actual, expected in cases:
+                    with self.subTest(source=source_format, contract=contract_format,
+                                      expected=expected):
+                        report, code = self.literal_report(actual, expected, source_format, contract_format)
+                        self.assertEqual(0, code)
+                        self.assertFalse(report["errors"])
+        # TOML allows separators in the exponent; JSON does not.
+        for toml, json_literal in [("1e-425_000_000", "1e-425000000"),
+                                   ("0E+425_000_000", "0.0")]:
+            for actual, expected, source_format, contract_format in (
+                    (toml, json_literal, ".toml", ".json"),
+                    (json_literal, toml, ".json", ".toml")):
+                with self.subTest(source=source_format, contract=contract_format, literal=toml):
+                    report, code = self.literal_report(actual, expected, source_format, contract_format)
+                    self.assertEqual(0, code)
+                    self.assertFalse(report["errors"])
+
+    def test_decimal_exponent_outside_application_bound_is_sanitized(self):
+        for suffix in (".json", ".toml"):
+            literals = ["1e-425000001", "0e+425000001", "1e-000425000001"]
+            if suffix == ".toml":
+                literals.extend(["1e-425_000_001", "0e+425_000_001"])
+            for literal in literals:
+                for source in (True, False):
+                    with self.subTest(suffix=suffix, literal=literal, source=source):
+                        report, code = (self.literal_report(literal, "0.0", suffix, ".json")
+                                        if source else self.literal_report("0.0", literal, ".json", suffix))
+                        self.assertEqual(2, code)
+                        self.assertEqual("invalid_document" if source else "contracts_invalid_document",
+                                         (report["results"] if source else report["errors"])[0]["reason"])
+                        self.assertNotIn(literal, render_json(report))
+                        self.assertNotIn(str(self.repo), render_json(report))
+
+    def test_decimal_comparison_ignores_ambient_precision(self):
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[FloatOperation] = True
+            for actual, expected, code in [("1.234567890123456789", "1.234567890123456789", 0),
+                                           ("1.234567890123456789", "1.234567890123456788", 1)]:
+                report, result_code = self.literal_report(actual, expected, ".toml", ".json")
+                self.assertEqual(code, result_code)
+                self.assertFalse(report["errors"])
 
     def test_pointer_special_keys_root_and_arrays(self):
         document = {"": "empty", "a/b": "slash", "a~b": "tilde", "~1": "literal",
