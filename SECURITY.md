@@ -33,6 +33,10 @@ the tool does not establish network connections itself.
 
 Source selectors cannot be absolute, traverse `..`, use Windows alternate
 streams/device names, or contain ambiguous portable path spellings. Root
+strings in the roots configuration and source selectors also reject Unicode surrogate code points before
+filesystem access, including surrogateescape placeholders for raw-byte names.
+Ordinary Unicode names are allowed. The caller-supplied location of the
+configuration files is outside this portable-path validation. Root
 directories cannot themselves be symlinks; symlinks below them and nonregular
 files are refused. Windows reparse points, including junctions, are conservatively
 refused. Config-file symlinks are refused as well. On platforms with

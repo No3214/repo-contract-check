@@ -233,6 +233,37 @@ class ContractTests(unittest.TestCase):
             report, code = self.check(self.rule(file=path))
             self.assertEqual(("sensitive_path_refused", 2), (report["errors"][0]["reason"], code))
 
+    def test_source_paths_reject_surrogate_code_points_before_source_reads(self):
+        original = core.file_access
+        def config_only(root, relative, **options):
+            self.assertIn(relative, {"contracts.json", "roots.json"})
+            return original(root, relative, **options)
+        for surrogate in ("\ud800", "\udcff", "\udfff"):
+            with self.subTest(code_point=ord(surrogate)), \
+                    patch.object(core, "file_access", side_effect=config_only):
+                report, code = self.check(self.rule(file=surrogate + ".json"))
+                self.assertEqual(2, code)
+                self.assertEqual("invalid_contract", report["errors"][0]["reason"])
+
+    def test_root_paths_reject_surrogate_code_points(self):
+        for surrogate in ("\ud800", "\udcff", "\udfff"):
+            with self.subTest(code_point=ord(surrogate)):
+                self.write_json(self.roots, {"schema_version": 1,
+                                           "roots": {"demo": str(self.repo / surrogate)}})
+                report, code = self.check(self.rule())
+                self.assertEqual(2, code)
+                self.assertEqual("invalid_roots", report["errors"][0]["reason"])
+
+    def test_unicode_scalar_paths_remain_supported(self):
+        # Turkish letters and a supplementary-plane character are valid paths;
+        # rejecting surrogate placeholders must not reject non-ASCII names.
+        folder = self.repo / "ölçüm-\U0001f4ca"
+        folder.mkdir()
+        self.write_json(folder / "çıktı.json", {"value": "ok"})
+        self.write_json(self.roots, {"schema_version": 1, "roots": {"demo": str(folder)}})
+        result, code = self.result(self.rule(file="çıktı.json"))
+        self.assertEqual(("value_matches", 0), (result["reason"], code))
+
     def test_archive_and_other_content_formats_rejected(self):
         for path in ("source.zip", "source.tar.gz", "config.yaml", ".env"):
             report, code = self.check(self.rule(file=path))
@@ -409,6 +440,16 @@ class ContractTests(unittest.TestCase):
         self.assertEqual("internal_error", json.loads(stdout)["errors"][0]["reason"])
         self.assertNotIn(secret, stdout + stderr)
         self.assertNotIn(str(self.repo), stdout + stderr)
+
+    def test_cli_reports_surrogate_path_as_configuration_error(self):
+        self.write_json(self.contracts, {"schema_version": 1,
+                                       "checks": [self.rule(file="\ud800.json")]})
+        args = ["check", str(self.contracts), "--roots", str(self.roots), "--format", "json"]
+        code, stdout, stderr = self.cli(args)
+        self.assertEqual(2, code)
+        self.assertEqual("invalid_contract", json.loads(stdout)["errors"][0]["reason"])
+        self.assertEqual("", stderr)
+        self.assertNotIn(str(self.repo), stdout)
 
     def test_os_error_text_is_sanitized(self):
         secret = "PRIVATE-SYNTHETIC-SECRET"
