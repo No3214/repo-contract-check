@@ -18,6 +18,7 @@ MAX_DOCUMENT_BYTES = 1_048_576
 MAX_SOURCE_BYTES = 8 * MAX_DOCUMENT_BYTES
 MAX_CHECKS = 256
 MAX_DEPTH = 64
+MAX_LITERAL_EXPONENT = 425_000_000
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 ARRAY_INDEX = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 KINDS = frozenset({"file_exists", "value_exists", "equals", "nonempty_string"})
@@ -135,9 +136,23 @@ def _exact_float(text: str) -> Decimal | float:
     approximate = float(text)
     if not math.isfinite(approximate):
         return approximate
+    # The C and pure-Python Decimal backends have different representation
+    # limits. Use the portable C exponent bound as an explicit input policy.
+    # Check normalized text before construction: never parse a huge integer
+    # exponent or expand a power of ten. The document limit bounds the digits.
+    mantissa, separator, exponent = text.lower().partition("e")
+    digits = exponent.lstrip("+-").replace("_", "").lstrip("0")
+    limit = str(MAX_LITERAL_EXPONENT)
+    if len(digits) > len(limit) or (len(digits) == len(limit) and digits > limit):
+        raise InputError("invalid_document")
+    if separator:
+        # The pure-Python constructor parses the exponent with int(). Remove
+        # redundant zeros before it can hit Python's integer-string limit.
+        sign = "-" if exponent.startswith("-") else ""
+        text = mantissa + "e" + sign + (digits or "0")
     value = Decimal(text)
-    # Decimal can return NaN for an unrepresentable exponent when the caller
-    # disabled InvalidOperation traps. Report the same fixed error either way.
+    # Constructor errors can become NaN when InvalidOperation traps are
+    # disabled. Report the same fixed error either way.
     if not value.is_finite():
         raise InputError("invalid_document")
     return value

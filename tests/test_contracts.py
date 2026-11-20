@@ -205,6 +205,46 @@ class ContractTests(unittest.TestCase):
                         self.assertEqual(2, code)
                         self.assertEqual("contracts_invalid_document", report["errors"][0]["reason"])
 
+    def test_decimal_exponent_boundary_and_equivalent_spellings(self):
+        cases = [("1e-425000000", "1.0e-425000000"),
+                 ("1E-000425000000", "1e-425000000"),
+                 ("0E+425000000", "0.0"),
+                 ("1e-" + "0" * 5000 + "9999", "1e-9999")]
+        for source_format in (".json", ".toml"):
+            for contract_format in (".json", ".toml"):
+                for actual, expected in cases:
+                    with self.subTest(source=source_format, contract=contract_format,
+                                      expected=expected):
+                        report, code = self.literal_report(actual, expected, source_format, contract_format)
+                        self.assertEqual(0, code)
+                        self.assertFalse(report["errors"])
+        # TOML allows separators in the exponent; JSON does not.
+        for toml, json_literal in [("1e-425_000_000", "1e-425000000"),
+                                   ("0E+425_000_000", "0.0")]:
+            for actual, expected, source_format, contract_format in (
+                    (toml, json_literal, ".toml", ".json"),
+                    (json_literal, toml, ".json", ".toml")):
+                with self.subTest(source=source_format, contract=contract_format, literal=toml):
+                    report, code = self.literal_report(actual, expected, source_format, contract_format)
+                    self.assertEqual(0, code)
+                    self.assertFalse(report["errors"])
+
+    def test_decimal_exponent_outside_application_bound_is_sanitized(self):
+        for suffix in (".json", ".toml"):
+            literals = ["1e-425000001", "0e+425000001", "1e-000425000001"]
+            if suffix == ".toml":
+                literals.extend(["1e-425_000_001", "0e+425_000_001"])
+            for literal in literals:
+                for source in (True, False):
+                    with self.subTest(suffix=suffix, literal=literal, source=source):
+                        report, code = (self.literal_report(literal, "0.0", suffix, ".json")
+                                        if source else self.literal_report("0.0", literal, ".json", suffix))
+                        self.assertEqual(2, code)
+                        self.assertEqual("invalid_document" if source else "contracts_invalid_document",
+                                         (report["results"] if source else report["errors"])[0]["reason"])
+                        self.assertNotIn(literal, render_json(report))
+                        self.assertNotIn(str(self.repo), render_json(report))
+
     def test_decimal_comparison_ignores_ambient_precision(self):
         with localcontext() as context:
             context.prec = 2

@@ -167,8 +167,12 @@ interpret semver ranges or validate installed runtimes. TOML dates/times and
 non-finite floats produce `unsupported_value` for `equals`; `value_exists` may
 locate them. The existing float-range guard is retained: JSON NaN, Infinity,
 and numbers overflowing Python's finite float range are rejected; TOML
-overflowing floats remain unsupported by `equals`. Numeric tokens outside
-Decimal's representation limits produce `invalid_document`.
+overflowing floats remain unsupported by `equals`. For literals accepted by
+that range guard, the explicit `e`/`E` exponent must be between `-425000000`
+and `425000000`, inclusive. Leading zeros and TOML digit separators do not
+change this bound. An exponent outside it produces `invalid_document` before
+decimal construction, independently of the Python backend or arithmetic context.
+Values such as `1e-9999` remain exact and distinct from zero.
 
 ## Reports and exit codes
 
