@@ -276,8 +276,15 @@ def _identifier(value: Any) -> bool:
     return type(value) is str and IDENTIFIER.fullmatch(value) is not None
 
 
+def _unicode_scalar_text(value: str) -> bool:
+    # JSON can decode unpaired UTF-16 surrogates. They are not portable path
+    # characters: OS encoding can raise, or surrogateescape can select raw bytes.
+    return not any(0xD800 <= ord(character) <= 0xDFFF for character in value)
+
+
 def _source_path(value: Any) -> bool:
-    if type(value) is not str or not value or len(value) > 512:
+    if (type(value) is not str or not value or len(value) > 512
+            or not _unicode_scalar_text(value)):
         return False
     if (any(character in value for character in ('\\', ':', '<', '>', '"', '|', '?', '*'))
             or any(ord(character) < 32 for character in value)
@@ -308,6 +315,7 @@ def validate_roots(document: Any, base: Path) -> dict[str, Path]:
     for alias, value in document["roots"].items():
         if (not _identifier(alias) or type(value) is not str or not value
                 or len(value) > 4096 or "\x00" in value
+                or not _unicode_scalar_text(value)
                 or value.startswith(("//", "\\\\"))):
             raise InputError("invalid_roots")
         path = Path(value)

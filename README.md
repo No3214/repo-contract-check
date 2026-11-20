@@ -119,7 +119,12 @@ repo-contract-check check contracts.json --roots roots.local.json --format json
 
 Root paths resolve relative to the roots file, independently of your working
 directory. Absolute local root paths are also accepted; `~` and environment
-variables are not expanded. Keep this file private. This project's `.gitignore`
+variables are not expanded. Configured root strings and source selectors must use Unicode scalar
+characters; surrogate placeholders from escaped JSON or raw-byte filenames are
+refused as configuration errors. Ordinary Unicode names are supported. The
+caller-supplied location of the configuration files is outside this portable-path
+validation.
+Keep this file private. This project's `.gitignore`
 excludes `*.local.json` and `*.local.toml`; other repositories need their own
 ignore rule. Portable contracts may also be sensitive if their literal
 expectations describe private details: review them before sharing.
