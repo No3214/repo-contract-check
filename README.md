@@ -207,6 +207,12 @@ is a failed expectation; a missing root directory is an input error. Other
 repositories continue after an individual input error. Configuration errors stop
 the run before source manifests are opened. See [reason codes](docs/reason-codes.md).
 
+Reports, help, and version output use UTF-8 and are flushed before success is
+returned. An output write or flush failure returns exit **2**, even if the checks
+themselves passed. A pipe or redirected file can contain partial output on failure;
+check the process exit code before consuming its report. Output errors do not
+print private stream paths or OS exception details.
+
 ## Privacy and practical limits
 
 Reports omit local paths, filenames, pointers, source excerpts, and actual or
@@ -246,8 +252,11 @@ python -m build
 ```
 
 CI is configured for Python 3.11–3.14 on Linux and Python 3.12 on Windows and macOS,
-plus an isolated wheel smoke test. This configuration is not a claim that an
-unrun CI matrix passed. See [CONTRIBUTING.md](CONTRIBUTING.md).
+plus regression tests and an isolated wheel smoke test on Python 3.15. It runs on
+pull requests and pushes to `main`; a feature branch without an open PR does not
+start CI. A newer run for the same ref cancels an older in-progress run. Required
+check names remain the same. This configuration is not a claim that an unrun CI
+matrix passed. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Türkçe hızlı başlangıç
 
@@ -262,7 +271,10 @@ eder. Depo komutlarını çalıştırmaz; testlerin geçtiğini veya CI'ın çal
 iddia etmez. Gerçek klasör yollarını ayrı bir `roots.local.json` dosyasında tutun.
 Raporda takma adlar, kural kimlikleri ve sonuç kodları görünür; yollar ve değerler
 yer almaz. Çıkış kodları: `0` tüm kontroller geçti, `1` beklenti karşılanmadı,
-`2` yapılandırma veya okuma hatası. Örneklerin tamamı sentetiktir.
+`2` yapılandırma, okuma veya çıktı hatası. Rapor, yardım ve sürüm çıktıları UTF-8
+kullanır; başarı dönmeden çıktı tamponu boşaltılır. Boru veya yönlendirilmiş dosya
+hata durumunda kısmi çıktı içerebilir; raporu kullanmadan işlem çıkış kodunu kontrol
+edin. Örneklerin tamamı sentetiktir.
 
 ## License
 

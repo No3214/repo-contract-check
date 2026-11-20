@@ -21,6 +21,24 @@ from repo_contract_check import core
 from repo_contract_check.cli import main, render_json, render_markdown
 
 
+class ShortRawOutput(io.RawIOBase):
+    """A real raw stream that accepts at most one byte per write."""
+
+    def __init__(self, progress=1):
+        self.progress = progress
+        self.data = bytearray()
+
+    def writable(self):
+        return True
+
+    def write(self, data):
+        if self.progress is None:
+            return None
+        written = min(self.progress, len(data))
+        self.data.extend(data[:written])
+        return written
+
+
 class ContractTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="contract-synthetic-")
@@ -631,6 +649,89 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr + result.stdout)
         self.assertEqual(1, json.loads(result.stdout)["summary"]["pass"])
         self.assertEqual("", result.stderr)
+
+    def output_arguments(self):
+        self.write_json(self.repo / "package.json", {"value": "ok"})
+        self.write_json(self.contracts, {"schema_version": 1, "checks": [self.rule()]})
+        check = ["check", str(self.contracts), "--roots", str(self.roots)]
+        return [check + ["--format", "json"], check + ["--format", "markdown"],
+                ["--help"], ["check", "--help"], ["--version"]]
+
+    def invoke_cli(self, arguments):
+        try:
+            return main(arguments)
+        except SystemExit as exc:
+            # argparse exits after successful help/version output.
+            return exc.code
+
+    def test_cli_completes_short_binary_writes(self):
+        for arguments in self.output_arguments():
+            with self.subTest(arguments=arguments):
+                expected, stderr = io.StringIO(), io.StringIO()
+                with redirect_stdout(expected), redirect_stderr(stderr):
+                    expected_code = self.invoke_cli(arguments)
+                self.assertEqual(0, expected_code)
+                raw = ShortRawOutput()
+                with io.TextIOWrapper(raw, encoding="utf-8", write_through=True) as stdout:
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        code = self.invoke_cli(arguments)
+                    self.assertEqual(expected_code, code)
+                    self.assertEqual(expected.getvalue().encode("utf-8"), raw.data)
+                self.assertEqual("", stderr.getvalue())
+
+    def test_cli_rejects_binary_writes_without_progress(self):
+        arguments = self.output_arguments()[0]
+        for progress in (0, None):
+            with self.subTest(progress=progress):
+                raw, stderr = ShortRawOutput(progress), io.StringIO()
+                with io.TextIOWrapper(raw, encoding="utf-8", write_through=True) as stdout:
+                    with redirect_stdout(stdout), redirect_stderr(stderr):
+                        code = self.invoke_cli(arguments)
+                self.assertEqual(2, code)
+                self.assertEqual("", stderr.getvalue())
+
+    def test_cli_closed_text_capture_returns_operational_error(self):
+        for arguments in self.output_arguments():
+            with self.subTest(arguments=arguments):
+                stdout, stderr = io.StringIO(), io.StringIO()
+                stdout.close()
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = self.invoke_cli(arguments)
+                self.assertEqual(2, code)
+                self.assertEqual("", stderr.getvalue())
+
+    def test_cli_closed_pipe_returns_operational_error_without_traceback(self):
+        for arguments in self.output_arguments():
+            with self.subTest(arguments=arguments):
+                read_fd, write_fd = os.pipe()
+                os.close(read_fd)
+                with os.fdopen(write_fd, "wb") as sink:
+                    result = subprocess.run(
+                        [sys.executable, "-m", "repo_contract_check", *arguments],
+                        stdout=sink, stderr=subprocess.PIPE, check=False, timeout=10)
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertEqual(b"", result.stderr)
+
+    def test_cli_combined_closed_pipe_keeps_operational_exit_code(self):
+        arguments = self.output_arguments()[0]
+        read_fd, write_fd = os.pipe()
+        os.close(read_fd)
+        with os.fdopen(write_fd, "wb") as sink:
+            result = subprocess.run(
+                [sys.executable, "-m", "repo_contract_check", *arguments],
+                stdout=sink, stderr=subprocess.STDOUT, check=False, timeout=10)
+        self.assertEqual(2, result.returncode)
+
+    @unittest.skipUnless(sys.platform == "linux" and Path("/dev/full").exists(),
+                         "requires Linux /dev/full")
+    def test_cli_full_output_device_returns_operational_error_without_traceback(self):
+        arguments = self.output_arguments()[0]
+        with open("/dev/full", "wb") as sink:
+            result = subprocess.run(
+                [sys.executable, "-m", "repo_contract_check", *arguments],
+                stdout=sink, stderr=subprocess.PIPE, check=False, timeout=10)
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertEqual(b"", result.stderr)
 
 
 class CommittedExampleTests(unittest.TestCase):
