@@ -56,9 +56,11 @@ inside the 32-bit C representation's minimum exponent. The pure-Python backend
 does not enforce those C limits itself, so relying on constructor exceptions
 would make accepted input depend on the backend. The guard strips the sign,
 leading zeros, and TOML separators, then compares digit lengths and text and
-passes the shortened exponent to Decimal. It does not construct an arbitrary-size integer exponent
-or expand powers of ten. Exceeding the bound is a sanitized `invalid_document`
-error; ambient precision and trap settings do not alter the policy.
+passes the shortened exponent to Decimal. It does not construct an arbitrary-size
+integer exponent or expand powers of ten. Exceeding the bound is a sanitized
+`invalid_document` error; ambient precision and trap settings do not alter the
+policy. This standardizes exponent validation; backend parser limits on very
+long coefficients can still produce a sanitized `invalid_document` error.
 
 Input files have a 1 MiB limit. Source reads share an 8 MiB budget. A contract has
 at most 256 checks. Nesting is limited to 64 levels. JSON duplicate keys and
