@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repo-contract-check"
-version = "0.1.0"
+version = "0.1.1"
 description = "Offline checks for explicit per-repository JSON and TOML contracts"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,12 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Quality Assurance",
 ]
+
+[project.urls]
+Homepage = "https://github.com/No3214/repo-contract-check"
+Repository = "https://github.com/No3214/repo-contract-check"
+Issues = "https://github.com/No3214/repo-contract-check/issues"
+Changelog = "https://github.com/No3214/repo-contract-check/blob/main/CHANGELOG.md"
 
 [project.scripts]
 repo-contract-check = "repo_contract_check.cli:main"
